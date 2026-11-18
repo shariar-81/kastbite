@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Bike,
@@ -72,6 +72,21 @@ const INITIAL_USERS = [
   seed("u3", "Rider One", "rider@kastbite.com", "rider123", "delivery"),
   seed("u4", "Site Admin", "admin@kastbite.com", "admin123", "admin"),
 ];
+const DEFAULT_INGREDIENTS = {
+  "Chili Garlic Wings": ["Chicken wings", "Garlic", "Red chili", "Honey", "Soy sauce", "Spring onion"],
+  "Vegetable Spring Rolls": ["Cabbage", "Carrot", "Glass noodles", "Mushroom", "Spring roll wrapper", "Sesame oil"],
+  "Smoked Beef Rendang": ["Beef", "Coconut milk", "Lemongrass", "Galangal", "Dried chili", "Kaffir lime leaves", "Toasted coconut"],
+  "Grilled Lemongrass Chicken": ["Chicken thigh", "Lemongrass", "Garlic", "Fish sauce", "Palm sugar", "Black pepper"],
+  "Prawn Pad Thai": ["Rice noodles", "Prawns", "Tamarind", "Egg", "Bean sprouts", "Peanuts", "Lime"],
+  "Nasi Goreng": ["Jasmine rice", "Egg", "Sweet soy sauce", "Shallots", "Garlic", "Pickled cucumber"],
+  "Iced Lychee Tea": ["Black tea", "Lychee", "Fresh mint", "Ice", "Sugar syrup"],
+  "Calamansi Soda": ["Calamansi juice", "Sparkling water", "Palm sugar", "Ice"],
+  "Pandan Coconut Custard": ["Coconut milk", "Pandan", "Eggs", "Palm sugar", "Toasted coconut"],
+  "Black Sticky Rice Pudding": ["Black sticky rice", "Coconut cream", "Palm sugar", "Pandan", "Salt"],
+};
+const ingredientsOf = (item) => (item.ingredients && item.ingredients.length ? item.ingredients : DEFAULT_INGREDIENTS[item.name] || []);
+const parseList = (text) => String(text || "").split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+const sameMonth = (ts, now = new Date()) => { const d = new Date(ts); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth(); };
 const money = (value) => `$${Number(value).toFixed(2)}`;
 const readStorage = (key, fallback) => {
   try {
@@ -158,7 +173,7 @@ function GlowButton({ children, onClick, disabled = false, color = C.pink, class
 function Logo({ small = false }) {
   return (
     <div className={`brand-mark ${small ? "small" : ""}`}>
-      <span className="brand-dot" />
+      <svg className="brand-icon" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="118" fill="#e21b5c" /><path d="M176 138V374M338 150L204 262M236 234L346 374" fill="none" stroke="#fff" strokeWidth="58" strokeLinecap="round" strokeLinejoin="round" /><circle cx="396" cy="128" r="24" fill="#fff" /></svg>
       <span className="brand-kast">Kast</span><span>Bite</span>
     </div>
   );
@@ -276,14 +291,14 @@ function RoleSelect({ onSelect, users }) {
     <main className="role-screen">
       <div className="noise" />
       <div className="orb orb-pink" /><div className="orb orb-teal" />
-      <nav className="landing-nav"><Logo /><span className="eyebrow"><span className="live-dot" /> Offline-ready ordering</span><InstallButton compact /></nav>
+      <nav className="landing-nav"><Logo /><span className="eyebrow"><span className="live-dot" /> Online food ordering</span><InstallButton compact /></nav>
       <section className="hero-block">
         <div className="hero-copy">
           <div className="eyebrow"><Zap size={13} /> STREET FOOD, REWIRED</div>
           <h1>Order from your<br /><span className="gradient-text">favourite kitchen.</span></h1>
           <p>Browse the menu, pay by card or cash, and follow your order from the restaurant to your door. Restaurant, rider and admin views are included.</p>
-          <div className="location-search"><MapPin size={17} /><div><small>Delivering to</small><strong>Dhaka, Bangladesh</strong></div><button>Change</button></div>
-          <div className="hero-meta"><span><Wifi size={14} /> Works offline</span><span><Timer size={14} /> 25–35 min delivery</span><span><Sparkles size={14} /> Card or cash</span></div>
+          <div className="location-search"><MapPin size={17} /><div><small>Delivering to</small><strong>Chattogram, Bangladesh</strong></div><button>Change</button></div>
+          <div className="hero-meta"><span><Wifi size={14} /> Live order tracking</span><span><Timer size={14} /> 25–35 min delivery</span><span><Sparkles size={14} /> Card or cash</span></div>
         </div>
         <div className="role-panel">
           <div className="panel-kicker">Choose your view</div>
@@ -317,6 +332,7 @@ function CustomerApp({ deliveries, categories, user, menu, cart, setCart, orders
   const [payMethod, setPayMethod] = useState("Card");
   const [screen, setScreen] = useState("menu");
   const [cartOpen, setCartOpen] = useState(false);
+  const [openDish, setOpenDish] = useState(null);
   const [address, setAddress] = useState(user?.address || "");
   const [coords, setCoords] = useState(null);
   const [locMsg, setLocMsg] = useState("");
@@ -347,7 +363,7 @@ function CustomerApp({ deliveries, categories, user, menu, cart, setCart, orders
   function placeOrder() {
     if (!cartItems.length) return;
     const id = `#${String(Date.now()).slice(-4)}`;
-    const newOrder = { id, userId: user?.id, customerName: customerName || "Guest", address: address || "No address provided", coords, items: cartItems.map(({ image, ...rest }) => rest), total, status: "Placed", placedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) };
+    const newOrder = { id, placedTs: Date.now(), userId: user?.id, customerName: customerName || "Guest", address: address || "No address provided", coords, items: cartItems.map(({ image, ...rest }) => rest), total, status: "Placed", placedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) };
     setOrders((current) => [newOrder, ...current]);
     setPayments((current) => [{ orderId: id, method: payMethod, amount: total, status: payMethod === "Card" ? "Confirmed" : "Pending (cash)" }, ...current]);
     addLog(`Order ${id} placed · ${money(total)} · ${payMethod === "Card" ? "payment gateway confirmed" : "cash on delivery"}`);
@@ -358,13 +374,15 @@ function CustomerApp({ deliveries, categories, user, menu, cart, setCart, orders
     setScreen("tracking");
   }
 
+  if (screen === "history") return <OrderHistory orders={orders} onBack={() => setScreen("menu")} onOpen={(id) => { setLocalActiveOrderId(id); setScreen("tracking"); }} onLogout={onLogout} />;
   if (screen === "tracking" && activeOrder) return <OrderTracking delivery={deliveries.find((d) => d.orderId === activeOrder.id)} order={activeOrder} orders={orders} onBack={() => setScreen("menu")} onLogout={onLogout} />;
   if (screen === "checkout") return <Checkout coords={coords} locate={locate} locMsg={locMsg} payMethod={payMethod} setPayMethod={setPayMethod} cartItems={cartItems} total={total} customerName={customerName} setCustomerName={setCustomerName} address={address} setAddress={setAddress} onBack={() => setScreen("menu")} onPlace={placeOrder} />;
 
   return (
     <div className="app-shell">
-      <TopBar title="Customer" subtitle="Delivering to Dhaka · now" onLogout={onLogout} right={<button className="cart-trigger" onClick={() => setCartOpen(true)}><ShoppingCart size={16} /> Cart {itemCount > 0 && <b>{itemCount}</b>}</button>} />
+      <TopBar title="Customer" subtitle="Delivering in Chattogram · now" onLogout={onLogout} right={<button className="cart-trigger" onClick={() => setCartOpen(true)}><ShoppingCart size={16} /> Cart {itemCount > 0 && <b>{itemCount}</b>}</button>} />
       <main className="content-wrap">
+        <button className="loc-pill" onClick={() => setScreen("history")}><ShoppingBag size={15} /> My orders · {orders.filter((o) => o.placedTs && sameMonth(o.placedTs)).length} this month</button>
         {(() => { const live = orders.find((o) => !["Delivered", "Rejected"].includes(o.status)); return live && <button className="track-banner" onClick={() => { setLocalActiveOrderId(live.id); setScreen("tracking"); }}><span className="live-dot" /><span>Order {live.id} · {live.status}</span><b>Track order</b></button>; })()}
         <button className="loc-pill" onClick={locate}><MapPin size={15} /> {coords ? `Delivering to your GPS location (${coords.lat}, ${coords.lng})` : "Use my current location"}</button>{locMsg && <small className="loc-msg">{locMsg}</small>}
         <section className="promo-row"><div className="promo promo-brand"><strong>Hungry?<br />Fresh food in 25–35 min</strong><span>Pay by card or cash</span></div><div className="promo promo-dark"><strong>Order online,<br />track every step</strong><span>From kitchen to your door</span></div></section>
@@ -372,21 +390,37 @@ function CustomerApp({ deliveries, categories, user, menu, cart, setCart, orders
         <div className="cat-row">{[["All", "🍽️"], ...categories.filter((c) => menu.some((m) => m.category === c.name)).map((c) => [c.name, c.emoji])].map(([cat, icon]) => <button key={cat} className={category === cat ? "cat active" : "cat"} onClick={() => setCategory(cat)}><span>{icon}</span>{cat}</button>)}</div>
         <h2 className="feed-title">{category === "All" ? "Popular right now" : category}</h2>
         <section className="menu-grid">
-          {filteredMenu.map((item, index) => <MenuCard key={item.id} item={item} quantity={cart[item.id] || 0} onAdd={() => changeQty(item.id, 1)} onRemove={() => changeQty(item.id, -1)} index={index} />)}
+          {filteredMenu.map((item, index) => <MenuCard key={item.id} item={item} quantity={cart[item.id] || 0} onAdd={() => changeQty(item.id, 1)} onRemove={() => changeQty(item.id, -1)} onOpen={() => setOpenDish(item.id)} index={index} />)}
         </section>
       </main>
+      {(() => { const it = openDish && menu.find((m) => m.id === openDish); return it && <DishModal item={it} quantity={cart[it.id] || 0} onAdd={() => changeQty(it.id, 1)} onRemove={() => changeQty(it.id, -1)} onClose={() => setOpenDish(null)} />; })()}
       {itemCount > 0 && !cartOpen && <button className="basket-bar" onClick={() => setCartOpen(true)}><span className="basket-count">{itemCount}</span><span>View basket</span><b>{money(total)}</b></button>}
       {cartOpen && <CartDrawer items={cartItems} total={total} onChange={changeQty} onClose={() => setCartOpen(false)} onCheckout={() => { setCartOpen(false); setScreen("checkout"); }} />}
     </div>
   );
 }
 
-function MenuCard({ item, quantity, onAdd, onRemove, index }) {
+function DishModal({ item, quantity, onAdd, onRemove, onClose }) {
+  const ing = ingredientsOf(item);
   return (
-    <article className="menu-card" style={{ animationDelay: `${index * 45}ms` }}>
+    <div className="pf-backdrop" onClick={onClose}><div className="pf-card dish-card" onClick={(e) => e.stopPropagation()}>
+      <div className="dish-hero">{item.image ? <img src={item.image} alt={item.name} /> : <span>{item.emoji}</span>}</div>
+      <div className="pf-head"><h2>{item.name}</h2><button className="pf-x" onClick={onClose} aria-label="Close"><X size={18} /></button></div>
+      <p className="dish-meta">{item.category} · {money(item.price)}</p>
+      <p className="dish-desc">{item.desc}</p>
+      <h3 className="pf-sub">Ingredients</h3>
+      {ing.length ? <div className="ing-list">{ing.map((x) => <span key={x}>{x}</span>)}</div> : <p className="group-empty">The kitchen hasn't listed ingredients for this dish yet.</p>}
+      <div className="dish-actions">{quantity ? <div className="stepper"><button onClick={onRemove} aria-label="Remove one"><span>−</span></button><b>{quantity}</b><button onClick={onAdd} aria-label="Add one"><Plus size={15} /></button></div> : <button className="pf-btn" onClick={onAdd}>Add to basket · {money(item.price)}</button>}</div>
+    </div></div>
+  );
+}
+
+function MenuCard({ item, quantity, onAdd, onRemove, onOpen, index }) {
+  return (
+    <article className="menu-card" role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => { if (e.key === "Enter") onOpen(); }} style={{ animationDelay: `${index * 45}ms` }}>
       <div className="menu-card-top">{item.image ? <img className="food-photo" src={item.image} alt={item.name} /> : <span className="food-emoji">{item.emoji}</span>}<span className="food-tag">{item.tag}</span></div>
-      <div className="menu-card-body"><div className="food-category">{item.category} <SpiceLevel level={item.spice} /></div><h3>{item.name}</h3><p>{item.desc}</p></div>
-      <div className="menu-card-bottom"><strong>{money(item.price)}</strong>{quantity ? <div className="stepper"><button onClick={onRemove} aria-label="Remove one"><span>−</span></button><b>{quantity}</b><button onClick={onAdd} aria-label="Add one"><Plus size={15} /></button></div> : <button className="add-dish" onClick={onAdd}><Plus size={15} /> Add</button>}</div>
+      <div className="menu-card-body"><div className="food-category">{item.category} <SpiceLevel level={item.spice} /></div><h3>{item.name}</h3><p>{item.desc}</p><small className="card-hint">View ingredients</small></div>
+      <div className="menu-card-bottom"><strong>{money(item.price)}</strong>{quantity ? <div className="stepper"><button onClick={(e) => { e.stopPropagation(); onRemove(); }} aria-label="Remove one"><span>−</span></button><b>{quantity}</b><button onClick={(e) => { e.stopPropagation(); onAdd(); }} aria-label="Add one"><Plus size={15} /></button></div> : <button className="add-dish" onClick={(e) => { e.stopPropagation(); onAdd(); }}><Plus size={15} /> Add</button>}</div>
     </article>
   );
 }
@@ -400,8 +434,8 @@ function Checkout({ coords, locate, locMsg, payMethod, setPayMethod, cartItems, 
   return <div className="app-shell"><TopBar title="Checkout" subtitle="Almost there" onLogout={() => window.location.reload()} /><main className="checkout-wrap"><button className="back-link" onClick={onBack}><ArrowLeft size={15} /> Back to menu</button><div className="checkout-grid"><section><div className="eyebrow" style={{ color: C.pink }}>FINAL CHECK</div><h1 className="page-title">Make it<br /><span className="gradient-text">yours.</span></h1><p className="checkout-intro">Tell us where to send the good stuff. Pay by card through the simulated payment gateway, or choose cash on delivery. No real payment is processed.</p><label>Your name<input value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="e.g. Aisha Rahman" style={inputStyle} /></label><label>Delivery address<input value={address} onChange={(event) => setAddress(event.target.value)} placeholder="e.g. 12 Lotus Street, Apt 4B" style={inputStyle} /></label><button type="button" className="loc-pill" onClick={locate}><MapPin size={15} /> {coords ? `GPS location saved (${coords.lat}, ${coords.lng})` : "Use my current location"}</button>{locMsg && <small className="loc-msg">{locMsg}</small>}{[["Card", "Card · payment gateway", "Simulated · confirmed instantly"], ["Cash", "Cash on delivery", "Pay the rider on arrival"]].map(([id, title, note]) => <button type="button" key={id} className="payment-note" onClick={() => setPayMethod(id)} style={{ width: "100%", textAlign: "left", borderColor: payMethod === id ? C.teal : undefined }}><span className="payment-icon">$</span><div><strong>{title}</strong><small>{note}</small></div>{payMethod === id && <Check size={16} style={{ color: C.teal, marginLeft: "auto" }} />}</button>)}<GlowButton onClick={onPlace} disabled={!cartItems.length} className="full-button">Place order · {money(total)}</GlowButton></section><aside className="order-summary"><div className="eyebrow" style={{ color: C.teal }}>ORDER SUMMARY</div><h2>In the bag</h2>{cartItems.map((item) => <div className="summary-line" key={item.id}><span>{item.qty} × {item.name}</span><strong>{money(item.price * item.qty)}</strong></div>)}<div className="summary-total"><span>Total</span><strong>{money(total)}</strong></div></aside></div></main></div>;
 }
 
-const RESTO = { lat: 23.7925, lng: 90.4078 };
-const DEFAULT_DEST = { lat: 23.7806, lng: 90.4193 };
+const RESTO = { lat: 22.3594, lng: 91.8212 }; // kitchen near GEC Circle, Chattogram
+const DEFAULT_DEST = { lat: 22.3248, lng: 91.811 }; // default drop-off near Agrabad, Chattogram
 function routeFor(order) {
   const dest = order.coords || DEFAULT_DEST;
   return { dest, from: order.coords ? { lat: dest.lat + 0.014, lng: dest.lng - 0.01 } : RESTO };
@@ -450,6 +484,23 @@ function LiveMap({ order, delivery }) {
   );
 }
 
+function OrderHistory({ orders, onBack, onOpen, onLogout }) {
+  const now = new Date();
+  const mine = orders.filter((o) => o.placedTs && sameMonth(o.placedTs, now));
+  const spent = mine.filter((o) => o.status !== "Rejected").reduce((sum, o) => sum + o.total, 0);
+  const month = now.toLocaleString("en", { month: "long", year: "numeric" });
+  return (
+    <div className="app-shell"><TopBar title="My orders" subtitle={month} onLogout={onLogout} />
+      <main className="checkout-wrap">
+        <button className="back-link" onClick={onBack}><ArrowLeft size={15} /> Back to menu</button>
+        <h1 className="page-title">Your orders in<br /><span className="gradient-text">{now.toLocaleString("en", { month: "long" })}.</span></h1>
+        <p className="history-sum">{mine.length} {mine.length === 1 ? "order" : "orders"} · {money(spent)} spent</p>
+        {mine.length ? <div className="history-list">{mine.map((o) => <button key={o.id} className="history-row" onClick={() => onOpen(o.id)}><div><strong>{o.id}</strong><small>{new Date(o.placedTs).toLocaleString("en", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</small><span>{o.items.map((i) => `${i.qty}× ${i.name}`).join(", ")}</span></div><div className="history-right"><b>{money(o.total)}</b><StatusBadge status={o.status} /></div></button>)}</div> : <div className="wide-empty compact-empty"><ShoppingBag size={26} /><p>No orders yet this month. Your first one will show up here.</p></div>}
+        <p className="history-note">Your history shows this month's orders only and starts fresh on the 1st of every month.</p>
+      </main></div>
+  );
+}
+
 function OrderTracking({ delivery, order, orders, onBack, onLogout }) {
   const current = Math.max(0, STATUS_FLOW.indexOf(order.status));
   return <div className="app-shell"><TopBar title="Order tracking" subtitle={`Order ${order.id} · placed ${order.placedAt}`} onLogout={onLogout} /><main className="tracking-wrap"><button className="back-link" onClick={onBack}><ArrowLeft size={15} /> Back to menu</button><div className="tracking-hero"><div><div className="eyebrow" style={{ color: C.teal }}>ORDER {order.id}</div><h1 className="page-title">On its way<br /><span className="gradient-text">to you.</span></h1><p>We’re keeping an eye on it. Your order is currently <strong style={{ color: STATUS_COLOR[order.status] }}>{order.status.toLowerCase()}</strong>.</p></div><div className="tracking-orb"><Bike size={34} /><span>{order.status === "Out for Delivery" ? "On the way" : order.status === "Delivered" ? "Arrived" : "~ 25 min"}</span></div></div><LiveMap order={order} delivery={delivery} /><div className="timeline">{STATUS_FLOW.map((status, index) => { const Icon = STATUS_ICON[status]; const color = STATUS_COLOR[status]; const done = index <= current; return <div className={`timeline-item ${done ? "done" : ""}`} key={status}><div className="timeline-icon" style={done ? { background: `${color}20`, borderColor: color, color } : {}}><Icon size={18} /></div><div><strong>{status}</strong><small>{index === 0 ? "Order received" : index === 1 ? "The kitchen is on it" : index === 2 ? "Rider has picked it up" : "Enjoy every bite"}</small></div>{index < STATUS_FLOW.length - 1 && <span className="timeline-line" style={index < current ? { background: C.teal } : {}} />}</div>})}</div><div className="tracked-order"><div className="tracked-order-head"><div><div className="eyebrow" style={{ color: C.pink }}>DELIVERY DETAILS</div><h2>{order.customerName}</h2><p>{order.address}</p></div><StatusBadge status={order.status} /></div><div className="tracked-items">{order.items.map((item) => <span key={item.id}>{item.emoji} {item.qty} × {item.name}</span>)}</div><div className="tracked-total"><span>Total paid on delivery</span><strong>{money(order.total)}</strong></div></div>{orders.length > 1 && <div className="previous-orders"><h3>Recent orders</h3>{orders.slice(0, 4).map((recent) => <div key={recent.id}><span>{recent.id} · {recent.customerName}</span><StatusBadge status={recent.status} /></div>)}</div>}</main></div>;
@@ -488,7 +539,7 @@ function DeliveryApp({ user, orders, setOrders, deliveries, setDeliveries, setPa
   }, [useGps]);
   const ready = orders.filter((o) => o.status === "Preparing" && !deliveries.some((d) => d.orderId === o.id));
   const active = deliveries.filter((d) => d.status !== "Delivered");
-  function take(o) { const rt = routeFor(o); setDeliveries((c) => [{ orderId: o.id, rider, address: o.address, coords: o.coords, status: "Out for Delivery", from: rt.from, dest: rt.dest, pos: rt.from, progress: 0, mode: "sim", updatedAt: Date.now() }, ...c]); setOrders((c) => c.map((x) => x.id === o.id ? { ...x, status: "Out for Delivery" } : x)); addLog(`${rider} took order ${o.id}`); }
+  function take(o) { const rt = routeFor(o); setDeliveries((c) => [{ orderId: o.id, rider, riderId: user?.id, address: o.address, coords: o.coords, status: "Out for Delivery", from: rt.from, dest: rt.dest, pos: rt.from, progress: 0, mode: "sim", updatedAt: Date.now() }, ...c]); setOrders((c) => c.map((x) => x.id === o.id ? { ...x, status: "Out for Delivery" } : x)); addLog(`${rider} took order ${o.id}`); }
   function done(id) { setDeliveries((c) => c.map((d) => d.orderId === id ? { ...d, status: "Delivered" } : d)); setOrders((c) => c.map((x) => x.id === id ? { ...x, status: "Delivered" } : x)); setPayments((c) => c.map((p) => p.orderId === id && p.method === "Cash" ? { ...p, status: "Collected" } : p)); addLog(`Order ${id} delivered by ${rider}`); }
   const row = (o, btn) => <article className="staff-order" key={o.id}><div className="staff-order-top"><span className="order-number">{o.id}</span></div><div className="staff-order-main"><div><h3>{o.customerName || "Customer"}</h3><p>{o.address}<MapsLink coords={o.coords} /></p></div></div>{btn}</article>;
   return <div className="app-shell"><TopBar title="Delivery console" subtitle="Pickups and drop-offs" accent={C.amber} onLogout={onLogout} /><main className="content-wrap"><section className="staff-header"><div><div className="eyebrow" style={{ color: C.amber }}>RIDER / ASSIGNMENTS</div><h1 className="page-title">Deliver it<br /><span style={{ color: C.amber }}>hot.</span></h1></div><div className="queue-stat"><span>On the road</span><strong>{String(active.length).padStart(2, "0")}</strong></div></section><button className="loc-pill" onClick={() => setUseGps((v) => !v)}><MapPin size={15} /> {useGps ? "Sharing live GPS (tap to stop)" : "Share my live GPS with customers"}</button>{gpsMsg && <small className="loc-msg">{gpsMsg}</small>}<div className="section-heading"><h2>Ready for pickup</h2><span>{ready.length}</span></div><div className="order-queue">{ready.length ? ready.map((o) => row(o, <button className="advance-button" onClick={() => take(o)}>Take this delivery <Bike size={15} /></button>)) : <div className="wide-empty compact-empty"><p>No orders are waiting for a rider.</p></div>}</div><div className="section-heading"><h2>My deliveries</h2><span>{active.length}</span></div><div className="order-queue">{active.length ? active.map((d) => row({ id: d.orderId, address: d.address, coords: d.coords }, <button className="advance-button" onClick={() => done(d.orderId)}>Mark delivered <Check size={15} /></button>)) : <div className="wide-empty compact-empty"><p>Nothing on the road right now.</p></div>}</div></main></div>;
@@ -517,16 +568,16 @@ function AdminExtras({ users, setUsers, orders, payments, deliveries, logs, addL
 function AdminApp({ categories, setCategories, menu, setMenu, orders, extras, onLogout }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ name: "", category: categories[0]?.name || "", price: "", desc: "", emoji: "🍽️", image: "" });
+  const [form, setForm] = useState({ name: "", category: categories[0]?.name || "", price: "", desc: "", emoji: "🍽️", image: "", ingredients: "" });
   const [mq, setMq] = useState("");
   const [mcat, setMcat] = useState("All");
   const [showSec, setShowSec] = useState(false);
   const [sec, setSec] = useState({ name: "", emoji: "" });
   const [secErr, setSecErr] = useState("");
   const revenue = orders.reduce((sum, order) => sum + order.total, 0);
-  function startAdd(cat) { setEditingId(null); setForm({ name: "", category: cat || categories[0]?.name || "", price: "", desc: "", emoji: "🍽️", image: "" }); setShowForm(true); }
-  function startEdit(item) { setEditingId(item.id); setForm({ name: item.name, category: item.category, price: item.price, desc: item.desc, emoji: item.emoji, image: item.image || "" }); setShowForm(true); }
-  function save() { if (!form.name || !form.price) return; if (editingId) setMenu((current) => current.map((item) => item.id === editingId ? { ...item, ...form, price: Number(form.price) } : item)); else setMenu((current) => [...current, { ...form, id: `m${Date.now()}`, price: Number(form.price), spice: 0, tag: "New on the menu" }]); setShowForm(false); }
+  function startAdd(cat) { setEditingId(null); setForm({ name: "", category: cat || categories[0]?.name || "", price: "", desc: "", emoji: "🍽️", image: "", ingredients: "" }); setShowForm(true); }
+  function startEdit(item) { setEditingId(item.id); setForm({ name: item.name, category: item.category, price: item.price, desc: item.desc, emoji: item.emoji, image: item.image || "", ingredients: ingredientsOf(item).join(", ") }); setShowForm(true); }
+  function save() { if (!form.name || !form.price) return; if (editingId) setMenu((current) => current.map((item) => item.id === editingId ? { ...item, ...form, price: Number(form.price), ingredients: parseList(form.ingredients) } : item)); else setMenu((current) => [...current, { ...form, id: `m${Date.now()}`, price: Number(form.price), ingredients: parseList(form.ingredients), spice: 0, tag: "New on the menu" }]); setShowForm(false); }
   const groupNames = [...categories.map((c) => c.name), ...new Set(menu.map((m) => m.category).filter((n) => !categories.some((c) => c.name === n)))];
   const emojiOf = (n) => categories.find((c) => c.name === n)?.emoji || "🍴";
   const matches = (m) => `${m.name} ${m.desc}`.toLowerCase().includes(mq.trim().toLowerCase());
@@ -559,7 +610,7 @@ function readPhoto(file, done) {
   reader.readAsDataURL(file);
 }
 
-function MenuModal({ categoryNames, form, setForm, editingId, onClose, onSave }) { return <div className="modal-backdrop"><div className="menu-modal"><div className="modal-heading"><div><div className="eyebrow" style={{ color: C.violet }}>MENU</div><h2>{editingId ? "Edit item" : "Add new dish"}</h2></div><button className="icon-button" onClick={onClose}><X size={18} /></button></div><div className="modal-fields"><label>Name<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Mango sticky rice" /></label><label>Category<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{categoryNames.map((category) => <option key={category}>{category}</option>)}</select></label><label>Price<input type="number" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} placeholder="0.00" /></label><label>Description<input value={form.desc} onChange={(event) => setForm({ ...form, desc: event.target.value })} placeholder="A short description" /></label><div className="photo-row"><label>Emoji<input value={form.emoji} onChange={(event) => setForm({ ...form, emoji: event.target.value })} placeholder="🍽️" /></label><div className="photo-field"><span>Photo (optional)</span><div className="photo-pick">{form.image ? <img src={form.image} alt="Dish preview" /> : <span className="photo-empty">{form.emoji || "🍽️"}</span>}<label className="photo-btn">{form.image ? "Change" : "Upload photo"}<input type="file" accept="image/*" style={{ display: "none" }} onChange={(event) => { const f = event.target.files?.[0]; if (f) readPhoto(f, (data) => setForm((cur) => ({ ...cur, image: data }))); event.target.value = ""; }} /></label>{form.image && <button type="button" className="photo-remove" onClick={() => setForm({ ...form, image: "" })}>Remove</button>}</div></div></div></div><GlowButton color={C.violet} className="full-button" onClick={onSave}>Save dish <Check size={15} /></GlowButton></div></div>; }
+function MenuModal({ categoryNames, form, setForm, editingId, onClose, onSave }) { return <div className="modal-backdrop"><div className="menu-modal"><div className="modal-heading"><div><div className="eyebrow" style={{ color: C.violet }}>MENU</div><h2>{editingId ? "Edit item" : "Add new dish"}</h2></div><button className="icon-button" onClick={onClose}><X size={18} /></button></div><div className="modal-fields"><label>Name<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Mango sticky rice" /></label><label>Category<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{categoryNames.map((category) => <option key={category}>{category}</option>)}</select></label><label>Price<input type="number" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} placeholder="0.00" /></label><label>Description<input value={form.desc} onChange={(event) => setForm({ ...form, desc: event.target.value })} placeholder="A short description" /></label><div className="photo-row"><label>Emoji<input value={form.emoji} onChange={(event) => setForm({ ...form, emoji: event.target.value })} placeholder="🍽️" /></label><div className="photo-field"><span>Photo (optional)</span><div className="photo-pick">{form.image ? <img src={form.image} alt="Dish preview" /> : <span className="photo-empty">{form.emoji || "🍽️"}</span>}<label className="photo-btn">{form.image ? "Change" : "Upload photo"}<input type="file" accept="image/*" style={{ display: "none" }} onChange={(event) => { const f = event.target.files?.[0]; if (f) readPhoto(f, (data) => setForm((cur) => ({ ...cur, image: data }))); event.target.value = ""; }} /></label>{form.image && <button type="button" className="photo-remove" onClick={() => setForm({ ...form, image: "" })}>Remove</button>}</div></div></div><label className="ing-field">Ingredients <small>(separate with commas)</small><textarea className="pf-input" rows={3} placeholder="e.g. Chicken wings, garlic, red chili, honey, soy sauce" value={form.ingredients || ""} onChange={(event) => setForm({ ...form, ingredients: event.target.value })} /></label></div><GlowButton color={C.violet} className="full-button" onClick={onSave}>Save dish <Check size={15} /></GlowButton></div></div>; }
 
 export default function App() {
   const [view, setView] = useState(null);
@@ -572,12 +623,13 @@ export default function App() {
   useEffect(() => { localStorage.setItem("kastbite-categories", JSON.stringify(categories)); }, [categories]);
   useEffect(() => {
     const fresh = (d) => d.mode === "gps" && Date.now() - d.updatedAt < 8000;
+    const mine = (d) => d.riderId && d.riderId === sessionRef.current;
     const t = setInterval(() => {
       if (document.visibilityState !== "visible") return;
       setDeliveries((cur) => {
-        if (!cur.some((d) => d.status === "Out for Delivery" && d.from && !fresh(d))) return cur;
+        if (!cur.some((d) => d.status === "Out for Delivery" && d.from && mine(d) && !fresh(d))) return cur;
         return cur.map((d) => {
-          if (d.status !== "Out for Delivery" || !d.from || fresh(d)) return d;
+          if (d.status !== "Out for Delivery" || !d.from || !mine(d) || fresh(d)) return d;
           const progress = Math.min(0.97, (d.progress || 0) + 0.05);
           return { ...d, progress, mode: "sim", updatedAt: Date.now(), pos: { lat: d.from.lat + (d.dest.lat - d.from.lat) * progress, lng: d.from.lng + (d.dest.lng - d.from.lng) * progress } };
         });
@@ -602,6 +654,52 @@ export default function App() {
   const addLog = (text) => setLogs((c) => [{ t: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), text }, ...c].slice(0, 50));
   const [session, setSession] = useState(() => readStorage("kastbite-session", null));
   useEffect(() => { localStorage.setItem("kastbite-session", JSON.stringify(session)); }, [session]);
+  const sessionRef = useRef(null);
+  sessionRef.current = session;
+  const latest = useRef({});
+  latest.current = { orders, deliveries, payments, menu, categories };
+  const syncRef = useRef({ busy: false, meta: { orders: {}, deliveries: {}, payments: {} }, doc: { menu: { j: JSON.stringify(menu), t: 0, srv: -1 }, categories: { j: JSON.stringify(categories), t: 0, srv: -1 } } });
+  useEffect(() => {
+    const S = syncRef.current;
+    const keyOf = (it) => it.id ?? it.orderId;
+    const names = ["orders", "deliveries", "payments"];
+    const setters = { orders: setOrders, deliveries: setDeliveries, payments: setPayments, menu: setMenu, categories: setCategories };
+    async function tick() {
+      if (S.busy || document.visibilityState !== "visible") return;
+      S.busy = true;
+      try {
+        const L = latest.current, now = Date.now(), items = {}, snap = {}, docs = {}, since = {};
+        for (const n of names) {
+          snap[n] = JSON.stringify(L[n]);
+          items[n] = L[n].map((it) => { const k = keyOf(it), j = JSON.stringify(it), m = S.meta[n]; if (!m[k] || m[k].j !== j) m[k] = { j, t: now, c: m[k]?.c || now }; return { ...it, _t: m[k].t, _c: m[k].c }; });
+        }
+        for (const d of ["menu", "categories"]) {
+          const D = S.doc[d], j = JSON.stringify(L[d]);
+          if (D.j !== j) { D.j = j; D.t = now; }
+          since[d] = D.srv;
+          if (D.t > D.srv && D.t > 0) docs[d] = { t: D.t, v: L[d] };
+        }
+        const res = await fetch("/api/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items, docs, since }) });
+        if (!res.ok || !(res.headers.get("content-type") || "").includes("json")) return;
+        const data = await res.json();
+        for (const n of names) {
+          const m = S.meta[n];
+          const merged = (data.items[n] || []).map(({ _t, _c, ...it }) => { m[keyOf(it)] = { j: JSON.stringify(it), t: _t, c: _c }; return [it, _c]; }).sort((a, b) => b[1] - a[1]).map(([it]) => it);
+          const nowJson = JSON.stringify(latest.current[n]);
+          if (nowJson === snap[n] && JSON.stringify(merged) !== nowJson) setters[n](merged);
+        }
+        for (const d of ["menu", "categories"]) {
+          const D = S.doc[d], sd = data.docs?.[d];
+          if (sd && sd.t > D.t) { D.t = D.srv = sd.t; D.j = JSON.stringify(sd.v); setters[d](sd.v); }
+          else if (data.docT?.[d] !== undefined) D.srv = Math.max(D.srv, data.docT[d]);
+        }
+      } catch (err) { console.warn("sync skipped:", err?.message); /* offline or no backend: the app keeps working from local storage */ }
+      finally { S.busy = false; }
+    }
+    tick();
+    const t = setInterval(tick, 2500);
+    return () => clearInterval(t);
+  }, []);
   const user = users.find((u) => u.id === session && u.active) || null;
   const role = user ? (user.role === "admin" && view) || user.role : null;
   function login(email, pw) {

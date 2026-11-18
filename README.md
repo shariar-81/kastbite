@@ -51,3 +51,17 @@ moving KastBite marker (a pink pin with a "K"). The map is drawn in SVG so it al
 simulated along the route by default; on the Delivery console the rider can tap "Share my live GPS" to send real GPS
 positions instead. Positions are stored in the browser (D4 Deliveries), so tracking works between views/tabs of the same
 browser. Tracking between different phones needs a backend (WebSocket or polling API), which is not included yet.
+
+## Live backend (Cloudflare)
+`worker/index.ts` is a small Cloudflare Worker with one Durable Object. It keeps the shared orders, payments, deliveries
+(including the rider's live position), menu and sections, so a customer, the restaurant, a rider and an admin can each use
+their own phone or computer. The app syncs with `POST /api/sync` every 2.5 seconds. If the backend is not available
+(for example when the site is hosted as plain static files), the app keeps working from the browser's local storage.
+
+Deploy settings on Cloudflare (Workers Builds):
+- Build command: `pnpm exec vite build`
+- Deploy command: `npx wrangler deploy` (settings come from `wrangler.jsonc`)
+
+Still stored per device: user accounts. Starter accounts exist on every device; new customer sign-ups stay on the device
+where they signed up. Anyone who knows the `/api/sync` address could read the shared data, so add proper sign-in on the
+server before using real customer information.
